@@ -8,7 +8,7 @@
 
 in vec4 vPosition;
 
-uniform mat4 ModelView;
+uniform mat4 ModelView, Projection;
 
 void main() {
     gl_Position = ModelView * vPosition;
