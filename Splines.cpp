@@ -66,39 +66,29 @@ glm::vec4 initialControlPoints[CONTROL_POINTS] = {
 
 // Splines requirements
 //-----------------------------------------------
-const int SPLINE_SEGMENTS = 16;
-float t = 1.0f;
+float T_VALUES[5] = {1.0f,0.75f,0.5f,0.2f,0.05f};
 //Maximum number of subdivisions for the curves
-const int MAX_SUBDIVISIONS = t*SPLINE_SEGMENTS;
+const int MAX_SUBDIVISIONS = 20;
 
-//random logic
-//The times 3 is because we need 3 different sets of vertices
-//for the different types of splines
-const int SPLINE_VERTICES = CONTROL_POINTS*SPLINE_SEGMENTS*3;
+const int SPLINE_VERTICES = CONTROL_POINTS*MAX_SUBDIVISIONS;
 
-//0 is start, 1 is end
-const int BEZIER_VERTICES[2] = {0, SPLINE_VERTICES/3};
-const int CATMULL_VERTICES[2] = {SPLINE_VERTICES/3, 2*(SPLINE_VERTICES/3)};
-const int UNIFORM_VERTICES[2] = {2*(SPLINE_VERTICES/3), SPLINE_VERTICES-1};
-
-glm::vec4 splineVertices[SPLINE_VERTICES];
+glm::vec4 bezierVertices[SPLINE_VERTICES];
+glm::vec4 catmullVertices[SPLINE_VERTICES];
+glm::vec4 uniformVertices[SPLINE_VERTICES];
 
 
 // Program-required variables
 //----------------------------------------------------------------------------
 
 // Need global access to VAOs
-GLuint VAOs[2];
-
-//Probably won't need these
-// Array of rotation angles for each coordinate axis, in angles (taken from ex8)
-enum { Xaxis = 0, Yaxis = 1, Zaxis = 2, NumAxes = 3 };
-int Axis = Yaxis;
-GLfloat Theta[NumAxes] = { 15.0, 0.0, 0.0 };
+GLuint VAOs[4];
 
 enum { Bezier = 0, CatmullRom = 1, UniformRational = 2 };
 int mode = Bezier;
 
+enum { t1 = 0, t2 = 1, t3 = 2, t4 = 3, t5 = 4 };
+float t = T_VALUES[t1];
+int tMode = t1;
 
 // Shader program variables
 //------------------------------------------------------------
@@ -113,95 +103,139 @@ GLuint ProjectionS, ProjectionCP;
 // Splines Functions
 //----------------------------------------------------------------------------
 
-// Used to create the vertices along the spline segment.
-// Takes in a variable for the offset position of the curve and
-// the starting position of the curve.
-void createCurve(int offset, glm::vec4 initialPosition) {
-    glm::vec4 curvePoint;
-    float x = 0.0f;
-    float y = 0.0f;
-    for ( int i=0; i<=SPLINE_SEGMENTS; i++ ) {
-        if ( mode == Bezier ) {
-            //compute a bezier curve
-        } else if ( mode == CatmullRom ) {
-            //compute a Catmull-Rom curve
-        } else {
-            //compute a Uniform Rational Bezier curve
-        }//end if-else
+int counter = 0;
+// Used to create the vertices along a bezier spline segment.
+// Takes in a variable for the offset positions of the control points.
+void createBezierCurve(int p0, int p1, int p2, int p3) {
+    float x = 0;
+    float y = 0;
+    for ( float i=0; i<1; i+=t ) {
+        x = pow((1-i),3)*controlPointVertices[p0].x +
+            3*pow((1-i),2)*i*controlPointVertices[p1].x +
+            3*(1-i)*pow(i,2)*controlPointVertices[p2].x +
+            pow(i,3)*controlPointVertices[p3].x;
+        y = pow((1-i),3)*controlPointVertices[p0].y +
+            3*pow((1-i),2)*i*controlPointVertices[p1].y +
+            3*(1-i)*pow(i,2)*controlPointVertices[p2].y +
+            pow(i,3)*controlPointVertices[p3].y;
+        bezierVertices[counter++] = glm::vec4(x,y,0.0,1.0);
     }//end for
-}//end createCurve
+}//end createBezierCurve
 
-// Used to actually build all of the vertices of the slpines
-// by calling the createCurve function a given amount of times.
-// It will then store those vertices into the spline vertices
-// array.
+int counter = 0;
+// Used to create the vertices along a catmull-rom spline segment.
+// Takes in a variable for the offset position of the control points.
+void createCatmullCurve(int p0, int p1, int p2, int p3) {
+    float x = 0;
+    float y = 0;
+    for ( float i=0; i<1; i+=t ) {
+        x = pow(i,3)*(-controlPointVertices[p0].x +
+             3*controlPointVertices[p1].x -
+             3*controlPointVertices[p2].x + 
+             controlPointVertices[p3].x);
+        x += pow(i,2)*(2*controlPointVertices[p0].x -
+             5*controlPointVertices[p1].x +
+             4*controlPointVertices[p2].x - 
+             controlPointVertices[p3].x);
+        x += i*(-controlPointVertices[p0].x +
+             controlPointVertices[p2].x);
+        x += 2*controlPointVertices[p1].x;
+        x/= 2;
+        y = pow(i,3)*(-controlPointVertices[p0].y +
+             3*controlPointVertices[p1].y -
+             3*controlPointVertices[p2].y + 
+             controlPointVertices[p3].y);
+        y += pow(i,2)*(2*controlPointVertices[p0].y -
+             5*controlPointVertices[p1].y +
+             4*controlPointVertices[p2].y - 
+             controlPointVertices[p3].y);
+        y += i*(-controlPointVertices[p0].y +
+             controlPointVertices[p2].y);
+        y += 2*controlPointVertices[p1].y;
+        y/= 2;
+        catmullVertices[counter++] = glm::vec4(x,y,0.0,1.0);
+    }//end for
+}//end createCatmullCurve
+
+int counter = 0;
+// Used to create the vertices along a uniform rational B-spline segment.
+// Takes in a variable for the offset position of the control points.
+void createUniformCurve(int p0, int p1, int p2, int p3) {
+    float x = 0;
+    float y = 0;
+    for ( float i=0; i<=1; i+=t ) {
+        x = (-pow(i,3)+3*pow(i,2)-3*i+1)*controlPointVertices[p0].x;
+        x += (3*pow(i,3)-6*pow(i,2)+3*t)*controlPointVertices[p1].x;
+        x += (-3*pow(i,3)+3*pow(i,2)+3*t)*controlPointVertices[p2].x;
+        x += (pow(i,3)+4*pow(i,2)+1)*controlPointVertices[p3].x;
+        x /= 6;
+        y = (-pow(i,3)+3*pow(i,2)-3*i+1)*controlPointVertices[p0].y;
+        y += (3*pow(i,3)-6*pow(i,2)+3*t)*controlPointVertices[p1].y;
+        y += (-3*pow(i,3)+3*pow(i,2)+3*t)*controlPointVertices[p2].y;
+        y += (pow(i,3)+4*pow(i,2)+1)*controlPointVertices[p3].y;
+        y /= 6;
+        uniformVertices[counter++] = glm::vec4(x,y,0.0,1.0);
+    }//end for
+}//end createUniformCurve
+
+// Used to actually build all of the vertices of the splines
+// by calling the proper createCurve function for all of the control
+// points. It will then store those vertices in their own spline
+// vertices array.
 void buildSplines() {
-    glm::vec4 startPoint;
-    float x = 0.0f;
-    float y = 0.0f;
-    //Build for Bezier first
-    mode = Bezier;
-    for (int i = BEZIER_VERTICES[0]; i<BEZIER_VERTICES[1]; i++) {
-        //Input the 4 point segment we would calculate?
-        //Maybe pass all of the indices of those points we'd
-        //need to build the curve
-        createCurve(i, startPoint);
+    for (int i = 0; i<CONTROL_POINTS; i++) {
+        //Setting the control points
+        int points[4] = {i-1,i,i+1,i+2};
+        if ( i == 0 ) {
+            points[0] = CONTROL_POINTS-1;
+        } else if ( i+2 % CONTROL_POINTS == 0 ) {
+            points[3] = 0;
+        } else if ( i+1 % CONTROL_POINTS == 0 ) {
+            points[2] = 0;
+            points[3] = 1;
+        }//end if-else
+        createBezierCurve(points[0],points[1],points[2],points[3]);
+        createCatmullCurve(points[0],points[1],points[2],points[3]);
+        createUniformCurve(points[0],points[1],points[2],points[3]);
     }//end for
-
-    //Build for Catmull-Rom Second
-    mode = CatmullRom;
-    for (int i = CATMULL_VERTICES[0]; i<CATMULL_VERTICES[1]; i++) {
-        //Input the 4 point segment we would calculate?
-        //Maybe pass all of the indices of those points we'd
-        //need to build the curve
-        createCurve(i, startPoint);
-    }//end for
-
-    //Build for Uniform Rational Bezier last
-    mode = UniformRational;
-    for (int i = UNIFORM_VERTICES[0]; i<UNIFORM_VERTICES[1]; i++) {
-        //Input the 4 point segment we would calculate?
-        //Maybe pass all of the indices of those points we'd
-        //need to build the curve
-        createCurve(i, startPoint);
-    }//end for
-
-    //Reset the mode to default
-    mode = Bezier;
 }//end buildSplines
 
 
 // Control Point Functions
 //---------------------------------------------------------------------------
 
+int index = 0;
 // Used to create the vertices of the cross for a control point.
-// Takes in a variable for the offset vertex position of the control
-// point and the starting position of the point.
-void createControlPoint(int offset, glm::vec4 initialPosition) {
-    controlPointVertices[offset++] = glm::vec4( initialPosition.x-CROSS_LENGTH,
+// Takes in a variable for the starting position of the point.
+void createControlPoint(glm::vec4 initialPosition) {
+    controlPointVertices[index++] = glm::vec4( initialPosition.x-CROSS_LENGTH,
                                                 initialPosition.y+CROSS_LENGTH,
-                                                0.0f,1.0f );
-    controlPointVertices[offset++] = glm::vec4( initialPosition.x+CROSS_LENGTH,
+                                                0.0f, 1.0f );
+    controlPointVertices[index++] = glm::vec4( initialPosition.x+CROSS_LENGTH,
                                                 initialPosition.y+CROSS_LENGTH,
-                                                0.0f,1.0f );
-    controlPointVertices[offset++] = glm::vec4( initialPosition.x+CROSS_LENGTH,
+                                                0.0f, 1.0f );
+    controlPointVertices[index++] = glm::vec4( initialPosition.x+CROSS_LENGTH,
                                                 initialPosition.y-CROSS_LENGTH,
-                                                0.0f,1.0f );
-    controlPointVertices[offset] = glm::vec4( initialPosition.x-CROSS_LENGTH,
+                                                0.0f, 1.0f );
+    controlPointVertices[index++] = glm::vec4( initialPosition.x-CROSS_LENGTH,
                                                 initialPosition.y-CROSS_LENGTH,
-                                                0.0f,1.0f );
+                                                0.0f, 1.0f );
 }//end createControlPoint
 
-// Used to build all of the vertices of the control points
+// Used to build all of the vertices of the control points crosses
 // by calling the createControlPoint function a given amount of times
-// which stores those vertices into the control point vertices
-// array.
+// which stores those vertices into the control point vertices array.
 void buildControlPoints() {
     for (int i = 0; i<CONTROL_POINTS; i++) {
-        createControlPoint(i,initialControlPoints[i]);
+        createControlPoint(initialControlPoints[i]);
     }//end for
 }//end buildControlPoints
 
+//Used to move one of the control points and set the vertices for
+//drawing accordingly.
+void updateControlPoint() {
+
+}//end updateControlPoint
 
 // Start of OpenGL drawing
 //-------------------------------------------------------------------
@@ -211,15 +245,43 @@ void loadSplinesBuffer(GLuint vPosition) {
     // Here for size of stack allocation
     GLuint buffer;
 
-    //**************Splines first****************
-    // Loading in the buffer for the spline
+    //**************Bezier Splines first****************
+    // Loading in the buffer for the bezier splines
     glBindVertexArray(VAOs[0]);
 
     // Creating and initializing a buffer object
     glGenBuffers(1, &buffer);
     glBindBuffer(GL_ARRAY_BUFFER, buffer);
     // Making sure it has enough space for just the splines
-    glBufferData(GL_ARRAY_BUFFER, sizeof(splineVertices), splineVertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(bezierVertices), bezierVertices, GL_STATIC_DRAW);
+    
+    // Set up vertex data for this vao
+    glEnableVertexAttribArray(vPosition);
+    glVertexAttribPointer(vPosition, 4, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(0));
+
+    //**************Catmull-Rom Splines second****************
+    // Loading in the buffer for the catmull-rom splines
+    glBindVertexArray(VAOs[1]);
+
+    // Creating and initializing a buffer object
+    glGenBuffers(1, &buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    // Making sure it has enough space for just the splines
+    glBufferData(GL_ARRAY_BUFFER, sizeof(catmullVertices), catmullVertices, GL_STATIC_DRAW);
+    
+    // Set up vertex data for this vao
+    glEnableVertexAttribArray(vPosition);
+    glVertexAttribPointer(vPosition, 4, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(0));
+
+    //**************Uniform Splines third****************
+    // Loading in the buffer for the uniform splines
+    glBindVertexArray(VAOs[2]);
+
+    // Creating and initializing a buffer object
+    glGenBuffers(1, &buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    // Making sure it has enough space for just the splines
+    glBufferData(GL_ARRAY_BUFFER, sizeof(uniformVertices), uniformVertices, GL_STATIC_DRAW);
     
     // Set up vertex data for this vao
     glEnableVertexAttribArray(vPosition);
@@ -243,9 +305,9 @@ void loadControlPointsBuffer(GLuint vPosition) {
     // Here for size of stack allocation
     GLuint buffer;
 
-    //**************Control Points second****************
+    //**************Control Points first****************
     // Loading in the buffer for the control points
-    glBindVertexArray(VAOs[1]);
+    glBindVertexArray(VAOs[0]);
 
     // Creating and initializing a buffer object
     glGenBuffers(1, &buffer);
@@ -258,12 +320,12 @@ void loadControlPointsBuffer(GLuint vPosition) {
     glVertexAttribPointer(vPosition, 4, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(0));
 }//end loadControlPointsBuffer
 
-//Only needed if we add the aditional control point function for A++
+// Needed for when one of the control points have been moved
 void reloadControlPointsBuffer() {
 
 }//end reloadControlPointsBuffer
 
-//Setup the shaders variables for the control points 
+// Setup the shaders variables for the control points 
 void setupControlPointsShader() {
     // Retrieve transformation uniform variable locations
     ModelViewCP = glGetUniformLocation(ProgramCP, "ModelView");
@@ -276,9 +338,9 @@ void init() {
     buildControlPoints();
 
     // Create vertex array objects
-    glGenVertexArrays(2, VAOs);
+    glGenVertexArrays(4, VAOs);
 
-    // Load shader set 1
+    // Load shader sets 1-3
     // First for the splines
     ProgramS = InitShader("a3v_splines.glsl", "a3f_splines.glsl");
     glUseProgram(ProgramS);
@@ -287,7 +349,7 @@ void init() {
     loadSplinesBuffer(vPosition);
     setupSplinesShaders();
 
-    // Load shader set 2
+    // Load shader set 4
     // Now the control points
     ProgramCP = InitShader("a3v_cps.glsl", "a3f_cps.glsl");
     glUseProgram(ProgramCP);
@@ -314,25 +376,18 @@ void drawSplines( glm::mat4 model_view ) {
     glUseProgram(ProgramS);
 
     glUniformMatrix4fv(ModelViewS, 1, GL_FALSE, glm::value_ptr(model_view));
-    glBindVertexArray(VAOs[0]);
 
     //Setting which types of splines we're drawing based on what mode we're in
-    int start = 0;
-    int end = 0;
-
     if ( mode == Bezier ) {
-        start = BEZIER_VERTICES[0];
-        end = BEZIER_VERTICES[1];
+        glBindVertexArray(VAOs[0]);
     } else if ( mode == CatmullRom ) {
-        start = CATMULL_VERTICES[0];
-        end = CATMULL_VERTICES[1];
+        glBindVertexArray(VAOs[1]);
     } else {
-        start = UNIFORM_VERTICES[0];
-        end = UNIFORM_VERTICES[1];
+        glBindVertexArray(VAOs[2]);
     }//end if-else
 
     //Draw all of the lines to make up the spline
-    for ( int i=start; i<end; i+=2 ) {
+    for ( int i=0; i<SPLINE_VERTICES; i+=2 ) {
         glDrawElements(GL_LINE_STRIP, 2, GL_UNSIGNED_INT, (void *)(i*sizeof(GLuint)));
     }//end for
 }//end drawSplines
@@ -342,7 +397,7 @@ void drawControlPoints ( glm::mat4 model_view ) {
     glUseProgram(ProgramCP);
 
     glUniformMatrix4fv(ModelViewCP, 1, GL_FALSE, glm::value_ptr(model_view));
-    glBindVertexArray(VAOs[1]);
+    glBindVertexArray(VAOs[3]);
 
     //Draw the control points
     for ( int i=0; i<CONTROL_POINT_VERTICES; i+=2 ) {
@@ -396,6 +451,7 @@ void mouse(int button, int state, int x, int y) {
         } else {
             controlPointVertices[pointClicked].x = x;
             controlPointVertices[pointClicked].y = y;
+            reloadControlPointsBuffer();
             reloadSplinesBuffer();
             firstClick = true;
         }//end if-else
@@ -415,24 +471,24 @@ void keyboard(unsigned char key, int x, int y) {
         case ' ':
             //Switch between the splines modes
             mode++;
-            if ( mode-3 == 0 ) {
+            if ( mode == 3 ) {
                 mode = 0;
             }//end if
             break;
         case '1':
-            t = 1.0f;
+            t = T_VALUES[t1];
             break;
         case '2':
-            t = 0.75f;
+            t = T_VALUES[t2];
             break;
         case '3':
-            t = 0.5f;
+            t = T_VALUES[t3];
             break;
         case '4':
-            t = 0.2f;
+            t = T_VALUES[t4];
             break;
         case '5':
-            t = 0.05f;
+            t = T_VALUES[t5];
             break;    
     }//end switch-case
 }//end keyboard
