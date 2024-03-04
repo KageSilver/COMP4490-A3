@@ -68,7 +68,7 @@ glm::vec4 initialControlPoints[CONTROL_POINTS] = {
 //-----------------------------------------------
 //Maximum number of subdivisions for the curves
 int T_SUBDIVISIONS[5] = {1,2,4,10,20};
-const int TOTAL_SUBDIVISIONS = 1+2+4+10+20;
+const int TOTAL_SUBDIVISIONS = (1+2+4+10+20)*2;
 
 const int SPLINE_VERTICES = CONTROL_POINTS*TOTAL_SUBDIVISIONS;
 
@@ -76,6 +76,31 @@ glm::vec4 bezierVertices[SPLINE_VERTICES];
 glm::vec4 catmullVertices[SPLINE_VERTICES];
 glm::vec4 uniformVertices[SPLINE_VERTICES];
 
+
+// Bezier
+//----------------------------------------------------
+glm::mat4 BezierBasis = glm::mat4(-1, 3,-3,1,
+                                   3,-6, 3,0,
+                                  -3, 3, 0,0,
+                                   1, 0, 0,0);
+
+// Catmull-Rom
+//-----------------------------------------------------
+glm::mat4 Hermite = glm::mat4( 2,-2, 1, 1,
+                              -3, 3,-2,-1,
+                               0, 0, 1, 0,
+                               1, 0, 0, 0);
+glm::mat4 BasisCatmull = glm::mat4(   0,   1,  0,  0,
+                                      0,   0,  1,  0,
+                                   -0.5,   0,0.5,  0,
+                                      0,-0.5,  0,0.5);
+
+// Uniform
+//------------------------------------------------------
+glm::mat4 UniformBasis = glm::mat4(-1, 3,-3,1,
+                                    3,-6, 3,0,
+                                   -3, 0, 3,0,
+                                    1, 4, 1,0);
 
 // Program-required variables
 //----------------------------------------------------------------------------
@@ -96,9 +121,9 @@ int tMode = t1;
 //S for spline, CP for control points
 GLuint ProgramS, ProgramCP;
 
-// Model-view and projection matrices uniform location
+// Model-view matrix uniform location
 GLuint ModelViewS, ModelViewCP;
-GLuint ProjectionS, ProjectionCP;
+
 
 
 // Splines Functions
@@ -110,15 +135,23 @@ int counterBezier = 0;
 void createBezierCurve(int p0, int p1, int p2, int p3) {
     float x = 0;
     float y = 0;
-    for ( float i=0; i<1; i+=t ) {
-        x = pow((1-i),3)*controlPointVertices[p0].x +
-            3*pow((1-i),2)*i*controlPointVertices[p1].x +
-            3*(1-i)*pow(i,2)*controlPointVertices[p2].x +
-            pow(i,3)*controlPointVertices[p3].x;
-        y = pow((1-i),3)*controlPointVertices[p0].y +
-            3*pow((1-i),2)*i*controlPointVertices[p1].y +
-            3*(1-i)*pow(i,2)*controlPointVertices[p2].y +
-            pow(i,3)*controlPointVertices[p3].y;
+    glm::vec4 tValues;
+    glm::vec4 xVertex;
+    glm::vec4 yVertex;
+    glm::vec4 xValues = glm::vec4(initialControlPoints[p0].x,
+                                  initialControlPoints[p1].x,
+                                  initialControlPoints[p2].x,
+                                  initialControlPoints[p3].x);
+    glm::vec4 yValues = glm::vec4(initialControlPoints[p0].y,
+                                  initialControlPoints[p1].y,
+                                  initialControlPoints[p2].y,
+                                  initialControlPoints[p3].y);
+    for ( float i=0; i<=1; i+=t ) {
+        tValues = glm::vec4(pow(i,3),pow(i,2),i,1);
+        xVertex = tValues*BezierBasis*xValues;
+        x = xVertex[0]+xVertex[1]+xVertex[2]+xVertex[3];
+        yVertex = tValues*BezierBasis*yValues;
+        y = yVertex[0]+yVertex[1]+yVertex[2]+yVertex[3];
         bezierVertices[counterBezier++] = glm::vec4(x,y,0.0,1.0);
     }//end for
 }//end createBezierCurve
@@ -129,31 +162,31 @@ int counterCatmull = 0;
 void createCatmullCurve(int p0, int p1, int p2, int p3) {
     float x = 0;
     float y = 0;
-    for ( float i=0; i<1; i+=t ) {
-        x = pow(i,3)*(-controlPointVertices[p0].x +
-             3*controlPointVertices[p1].x -
-             3*controlPointVertices[p2].x + 
-             controlPointVertices[p3].x);
-        x += pow(i,2)*(2*controlPointVertices[p0].x -
-             5*controlPointVertices[p1].x +
-             4*controlPointVertices[p2].x - 
-             controlPointVertices[p3].x);
-        x += i*(-controlPointVertices[p0].x +
-             controlPointVertices[p2].x);
-        x += 2*controlPointVertices[p1].x;
-        x/= 2;
-        y = pow(i,3)*(-controlPointVertices[p0].y +
-             3*controlPointVertices[p1].y -
-             3*controlPointVertices[p2].y + 
-             controlPointVertices[p3].y);
-        y += pow(i,2)*(2*controlPointVertices[p0].y -
-             5*controlPointVertices[p1].y +
-             4*controlPointVertices[p2].y - 
-             controlPointVertices[p3].y);
-        y += i*(-controlPointVertices[p0].y +
-             controlPointVertices[p2].y);
-        y += 2*controlPointVertices[p1].y;
-        y/= 2;
+    for ( float i=0; i<=1; i+=t ) {
+        x = pow(i,3)*(-initialControlPoints[p0].x +
+             3*initialControlPoints[p1].x -
+             3*initialControlPoints[p2].x + 
+             initialControlPoints[p3].x);
+        x += pow(i,2)*(2*initialControlPoints[p0].x -
+             5*initialControlPoints[p1].x +
+             4*initialControlPoints[p2].x - 
+             initialControlPoints[p3].x);
+        x += i*(-initialControlPoints[p0].x +
+             initialControlPoints[p2].x);
+        x += 2*initialControlPoints[p1].x;
+        x /= 2;
+        y = pow(i,3)*(-initialControlPoints[p0].y +
+             3*initialControlPoints[p1].y -
+             3*initialControlPoints[p2].y + 
+             initialControlPoints[p3].y);
+        y += pow(i,2)*(2*initialControlPoints[p0].y -
+             5*initialControlPoints[p1].y +
+             4*initialControlPoints[p2].y - 
+             initialControlPoints[p3].y);
+        y += i*(-initialControlPoints[p0].y +
+             initialControlPoints[p2].y);
+        y += 2*initialControlPoints[p1].y;
+        y /= 2;
         catmullVertices[counterCatmull++] = glm::vec4(x,y,0.0,1.0);
     }//end for
 }//end createCatmullCurve
@@ -165,15 +198,15 @@ void createUniformCurve(int p0, int p1, int p2, int p3) {
     float x = 0;
     float y = 0;
     for ( float i=0; i<=1; i+=t ) {
-        x = (-pow(i,3)+3*pow(i,2)-3*i+1)*controlPointVertices[p0].x;
-        x += (3*pow(i,3)-6*pow(i,2)+3*t)*controlPointVertices[p1].x;
-        x += (-3*pow(i,3)+3*pow(i,2)+3*t)*controlPointVertices[p2].x;
-        x += (pow(i,3)+4*pow(i,2)+1)*controlPointVertices[p3].x;
+        x = (-pow(i,3)+3*pow(i,2)-3*i+1)*initialControlPoints[p0].x;
+        x += (3*pow(i,3)-6*pow(i,2)+3*i)*initialControlPoints[p1].x;
+        x += (-3*pow(i,3)+3*pow(i,2)+3*i)*initialControlPoints[p2].x;
+        x += (pow(i,3)+4*pow(i,2)+1)*initialControlPoints[p3].x;
         x /= 6;
-        y = (-pow(i,3)+3*pow(i,2)-3*i+1)*controlPointVertices[p0].y;
-        y += (3*pow(i,3)-6*pow(i,2)+3*t)*controlPointVertices[p1].y;
-        y += (-3*pow(i,3)+3*pow(i,2)+3*t)*controlPointVertices[p2].y;
-        y += (pow(i,3)+4*pow(i,2)+1)*controlPointVertices[p3].y;
+        y = (-pow(i,3)+3*pow(i,2)-3*i+1)*initialControlPoints[p0].y;
+        y += (3*pow(i,3)-6*pow(i,2)+3*i)*initialControlPoints[p1].y;
+        y += (-3*pow(i,3)+3*pow(i,2)+3*i)*initialControlPoints[p2].y;
+        y += (pow(i,3)+4*pow(i,2)+1)*initialControlPoints[p3].y;
         y /= 6;
         uniformVertices[counterUniform++] = glm::vec4(x,y,0.0,1.0);
     }//end for
@@ -186,14 +219,17 @@ void createUniformCurve(int p0, int p1, int p2, int p3) {
 void buildSplines() {
     //Making splines for each t value
     for (int j=0; j<5; j++) {
+        t = T_VALUES[j];
+        printf("\tJ: %d\n",j);
         for (int i = 0; i<CONTROL_POINTS; i++) {
             //Setting the control points
             int points[4] = {i-1,i,i+1,i+2};
+            printf("\t\tI: %d\n",i);
             if ( i == 0 ) {
                 points[0] = CONTROL_POINTS-1;
-            } else if ( i+2 % CONTROL_POINTS == 0 ) {
+            } else if ( (i+2) % CONTROL_POINTS == 0 ) {
                 points[3] = 0;
-            } else if ( i+1 % CONTROL_POINTS == 0 ) {
+            } else if ( (i+1) % CONTROL_POINTS == 0 ) {
                 points[2] = 0;
                 points[3] = 1;
             }//end if-else
@@ -201,8 +237,8 @@ void buildSplines() {
             createCatmullCurve(points[0],points[1],points[2],points[3]);
             createUniformCurve(points[0],points[1],points[2],points[3]);
         }//end for
-        t = T_VALUES[j];
     }//end for
+    t = T_VALUES[t1];
 }//end buildSplines
 
 
@@ -217,10 +253,10 @@ void createControlPoint(glm::vec4 initialPosition) {
                                                 initialPosition.y+CROSS_LENGTH,
                                                 0.0f, 1.0f );
     controlPointVertices[index++] = glm::vec4( initialPosition.x+CROSS_LENGTH,
-                                                initialPosition.y+CROSS_LENGTH,
+                                                initialPosition.y-CROSS_LENGTH,
                                                 0.0f, 1.0f );
     controlPointVertices[index++] = glm::vec4( initialPosition.x+CROSS_LENGTH,
-                                                initialPosition.y-CROSS_LENGTH,
+                                                initialPosition.y+CROSS_LENGTH,
                                                 0.0f, 1.0f );
     controlPointVertices[index++] = glm::vec4( initialPosition.x-CROSS_LENGTH,
                                                 initialPosition.y-CROSS_LENGTH,
@@ -250,9 +286,9 @@ void loadSplinesBuffer(GLuint vPosition) {
     // Here for size of stack allocation
     GLuint buffer;
 
-    //**************Bezier Splines first****************
+    //**************Bezier Splines second****************
     // Loading in the buffer for the bezier splines
-    glBindVertexArray(VAOs[0]);
+    glBindVertexArray(VAOs[1]);
 
     // Creating and initializing a buffer object
     glGenBuffers(1, &buffer);
@@ -264,9 +300,9 @@ void loadSplinesBuffer(GLuint vPosition) {
     glEnableVertexAttribArray(vPosition);
     glVertexAttribPointer(vPosition, 4, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(0));
 
-    //**************Catmull-Rom Splines second****************
+    //**************Catmull-Rom Splines third****************
     // Loading in the buffer for the catmull-rom splines
-    glBindVertexArray(VAOs[1]);
+    glBindVertexArray(VAOs[2]);
 
     // Creating and initializing a buffer object
     glGenBuffers(1, &buffer);
@@ -278,9 +314,9 @@ void loadSplinesBuffer(GLuint vPosition) {
     glEnableVertexAttribArray(vPosition);
     glVertexAttribPointer(vPosition, 4, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(0));
 
-    //**************Uniform Splines third****************
+    //**************Uniform Splines fourth****************
     // Loading in the buffer for the uniform splines
-    glBindVertexArray(VAOs[2]);
+    glBindVertexArray(VAOs[3]);
 
     // Creating and initializing a buffer object
     glGenBuffers(1, &buffer);
@@ -302,7 +338,6 @@ void reloadSplinesBuffer() {
 void setupSplinesShaders() {
     // Retrieve transformation uniform variable locations
     ModelViewS = glGetUniformLocation(ProgramS, "ModelView");
-    ProjectionS = glGetUniformLocation(ProgramS, "Projection");
 }//end setupSplinesShaders
 
 // Used to load the buffers for the control points, as necessary
@@ -326,7 +361,7 @@ void loadControlPointsBuffer(GLuint vPosition) {
 }//end loadControlPointsBuffer
 
 // Needed for when one of the control points have been moved
-void reloadControlPointsBuffer() {
+void reloadControlPointsBuffer(int pointClicked) {
 
 }//end reloadControlPointsBuffer
 
@@ -334,7 +369,6 @@ void reloadControlPointsBuffer() {
 void setupControlPointsShader() {
     // Retrieve transformation uniform variable locations
     ModelViewCP = glGetUniformLocation(ProgramCP, "ModelView");
-    ProjectionCP = glGetUniformLocation(ProgramCP, "Projection");
 }//end setupControlPointsShader
 
 // OpenGL initialization
@@ -386,11 +420,11 @@ void drawSplines( glm::mat4 model_view ) {
     int start = 0;
     int end = 0;
     if ( mode == Bezier ) {
-        glBindVertexArray(VAOs[0]);
-    } else if ( mode == CatmullRom ) {
         glBindVertexArray(VAOs[1]);
-    } else {
+    } else if ( mode == CatmullRom ) {
         glBindVertexArray(VAOs[2]);
+    } else {
+        glBindVertexArray(VAOs[3]);
     }//end if-else
 
     if ( tMode == t1 ) {
@@ -411,7 +445,7 @@ void drawSplines( glm::mat4 model_view ) {
     }//end if-else
 
     //Draw all of the lines to make up the spline
-    for ( int i=start; i<end; i+=2 ) {
+    for ( int i=start; i<=end; i++ ) {
         glDrawArrays(GL_LINE_STRIP, i, 2);
     }//end for
 }//end drawSplines
@@ -421,7 +455,7 @@ void drawControlPoints ( glm::mat4 model_view ) {
     glUseProgram(ProgramCP);
 
     glUniformMatrix4fv(ModelViewCP, 1, GL_FALSE, glm::value_ptr(model_view));
-    glBindVertexArray(VAOs[3]);
+    glBindVertexArray(VAOs[0]);
 
     //Draw the control points
     for ( int i=0; i<CONTROL_POINT_VERTICES; i+=2 ) {
@@ -464,9 +498,9 @@ void mouse(int button, int state, int x, int y) {
             bool found = false;
             for ( int i=0; i<CONTROL_POINTS && !found; i++ ) {
                 //Checking x
-                if ( controlPointVertices[i].x-PROXIMITY <= x && controlPointVertices[i].x+PROXIMITY >= x ) {
+                if ( initialControlPoints[i].x-PROXIMITY <= x && initialControlPoints[i].x+PROXIMITY >= x ) {
                     //Checking y
-                    if ( controlPointVertices[i].y-PROXIMITY <= y && controlPointVertices[i].y+PROXIMITY >= y ) {
+                    if ( initialControlPoints[i].y-PROXIMITY <= y && initialControlPoints[i].y+PROXIMITY >= y ) {
                         firstClick = false;
                         found = true;
                         pointClicked = i;
@@ -474,9 +508,9 @@ void mouse(int button, int state, int x, int y) {
                 }//end if
             }//end for
         } else {
-            controlPointVertices[pointClicked].x = x;
-            controlPointVertices[pointClicked].y = y;
-            reloadControlPointsBuffer();
+            initialControlPoints[pointClicked].x = x;
+            initialControlPoints[pointClicked].y = y;
+            reloadControlPointsBuffer(pointClicked);
             reloadSplinesBuffer();
             firstClick = true;
         }//end if-else
@@ -497,23 +531,28 @@ void keyboard(unsigned char key, int x, int y) {
             //Switch between the splines modes
             mode++;
             if ( mode == 3 ) {
-                mode = 0;
+                mode = Bezier;
             }//end if
             break;
         case '1':
             t = T_VALUES[t1];
+            tMode = t1;
             break;
         case '2':
             t = T_VALUES[t2];
+            tMode = t2;
             break;
         case '3':
             t = T_VALUES[t3];
+            tMode = t3;
             break;
         case '4':
             t = T_VALUES[t4];
+            tMode = t4;
             break;
         case '5':
             t = T_VALUES[t5];
+            tMode = t5;
             break;    
     }//end switch-case
 }//end keyboard
@@ -524,10 +563,5 @@ void reshape (int width, int height) {
     glViewport( 0, 0, width, height );
 
     GLfloat aspect = GLfloat(width)/height;
-    glm::mat4  projection = glm::ortho( glm::radians(45.0f), aspect, 0.5f, 8.0f );
 
-    glUseProgram(ProgramS);
-    glUniformMatrix4fv(ProjectionS, 1, GL_FALSE, glm::value_ptr(projection));
-    glUseProgram(ProgramCP);
-    glUniformMatrix4fv(ProjectionCP, 1, GL_FALSE, glm::value_ptr(projection));
 }//end reshape
