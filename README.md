@@ -7,6 +7,6 @@ I am running this on a Windows 10 PC with an AMD Ryzen 5 5600X 6-Core  Processor
 
 
 ### Other notes:
-I used example8, lots from example0, the assignment 1 sample solution and parts from my assignment 2 solution as a base example for both my curves and shader files.
+I used parts of my assignment 2 solution as a base example for both my curves files.
 
-<br> The shader code is very similar to what is in example 0, just with some variable names changed for my own personal understanding.
+<br> I used the following link to help me understand uniform cubic b-spline curves. I mostly use their method of thinking of separating each part of the parametric equation into separate functions, but I apply it in my own way. https://www2.cs.uregina.ca/~anima/UniformBSpline.pdf 

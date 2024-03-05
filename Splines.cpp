@@ -157,7 +157,6 @@ void createBezierCurve(int p0, int p1, int p2, int p3) {
         yVertex = tValues*BezierBasis*yValues[0];
         y = yVertex[0]+yVertex[1]+yVertex[2]+yVertex[3];
         bezierVertices[counterBezier++] = glm::vec4(x,y,0.0,1.0);
-        //printf("X: %f\tY: %f\n",x,y);
     }//end for
 }//end createBezierCurve
 
@@ -189,27 +188,43 @@ void createCatmullCurve(int p0, int p1, int p2, int p3) {
         y = yVertex[0]+yVertex[1]+yVertex[2]+yVertex[3];
         y /= 2;
         catmullVertices[counterCatmull++] = glm::vec4(x,y,0.0,1.0);
-        //printf("X: %f\tY: %f\n",x,y);
     }//end for
 }//end createCatmullCurve
 
+//Used research from this link https://www2.cs.uregina.ca/~anima/UniformBSpline.pdf
+//for the formulation of the parametric equations.
 int counterUniform = 0;
+float B0(float i) {
+    return pow(1-i,3)/6;
+}//end B0
+float B1(float i) {
+    return (3*pow(i,3)-6*pow(i,2)+4)/6;
+}//end B1
+float B2(float i) {
+    return (-3*pow(i,3)+3*pow(i,2)+3*i+1)/6;
+}//end B2
+float B3(float i) {
+    return pow(i,3)/6;
+}//end B3
+
 // Used to create the vertices along a uniform rational B-spline segment.
 // Takes in a variable for the offset position of the control points.
 void createUniformCurve(int p0, int p1, int p2, int p3) {
-    float x = 0;
-    float y = 0;
+    float x = 0.0f;
+    float y = 0.0f;
+    glm::mat4 xValues;
+    xValues[0] = glm::vec4(initialControlPoints[p0].x,
+                            initialControlPoints[p1].x,
+                            initialControlPoints[p2].x,
+                            initialControlPoints[p3].x);
+    glm::mat4 yValues;
+    yValues[0] = glm::vec4(initialControlPoints[p0].y,
+                            initialControlPoints[p1].y,
+                            initialControlPoints[p2].y,
+                            initialControlPoints[p3].y);
     for ( float i=0; i<=1; i+=t ) {
-        x = (-pow(i,3)+3*pow(i,2)-3*i+1)*initialControlPoints[p0].x;
-        x += (3*pow(i,3)-6*pow(i,2)+3*i)*initialControlPoints[p1].x;
-        x += (-3*pow(i,3)+3*pow(i,2)+3*i)*initialControlPoints[p2].x;
-        x += (pow(i,3)+4*pow(i,2)+1)*initialControlPoints[p3].x;
-        x /= 6;
-        y = (-pow(i,3)+3*pow(i,2)-3*i+1)*initialControlPoints[p0].y;
-        y += (3*pow(i,3)-6*pow(i,2)+3*i)*initialControlPoints[p1].y;
-        y += (-3*pow(i,3)+3*pow(i,2)+3*i)*initialControlPoints[p2].y;
-        y += (pow(i,3)+4*pow(i,2)+1)*initialControlPoints[p3].y;
-        y /= 6;
+        x = B0(i)*xValues[0][0]+B1(i)*xValues[0][1]+B2(i)*xValues[0][2]+B3(i)*xValues[0][3];
+        y = B0(i)*yValues[0][0]+B1(i)*yValues[0][1]+B2(i)*yValues[0][2]+B3(i)*yValues[0][3];
         uniformVertices[counterUniform++] = glm::vec4(x,y,0.0,1.0);
     }//end for
 }//end createUniformCurve
@@ -235,7 +250,9 @@ void buildSplines() {
                 points[2] = 0;
                 points[3] = 1;
             }//end if-else
-            createBezierCurve(points[0],points[1],points[2],points[3]);
+            if ( i % 4 == 0 ) {
+                createBezierCurve(points[0],points[1],points[2],points[3]);
+            }//end if
             createCatmullCurve(points[0],points[1],points[2],points[3]);
             createUniformCurve(points[0],points[1],points[2],points[3]);
         }//end for
@@ -243,9 +260,9 @@ void buildSplines() {
         CatmullSegments[j] = counterCatmull;
         UniformSegments[j] = counterUniform;
     }//end for
-    bezierVertices[counterBezier] = initialControlPoints[0];
-    catmullVertices[counterCatmull] = initialControlPoints[0];
-    uniformVertices[counterUniform] = initialControlPoints[0];
+    bezierVertices[counterBezier] = bezierVertices[0];
+    catmullVertices[counterCatmull] = catmullVertices[0];
+    uniformVertices[counterUniform] = uniformVertices[0];
     t = T_VALUES[t1];
 }//end buildSplines
 
@@ -559,8 +576,6 @@ void mouse(int button, int state, int x, int y) {
         newY = -newY;
         newX = -newX;
 
-        printf("Point clicked X: %f\n", newX);
-        printf("Point clicked Y: %f\n", newY);
         if ( firstClick ) {
             bool found = false;
             for ( int i=0; i<CONTROL_POINTS && !found; i++ ) {
@@ -575,7 +590,6 @@ void mouse(int button, int state, int x, int y) {
                 }//end if
             }//end for
         } else {
-
             initialControlPoints[pointClicked].x = newX;
             initialControlPoints[pointClicked].y = newY;
             reloadControlPointsBuffer(pointClicked);
