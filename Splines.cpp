@@ -48,11 +48,7 @@ glm::vec4 controlPointVertices[CONTROL_POINT_VERTICES];
 
 
 glm::vec4 initialControlPoints[CONTROL_POINTS] = {
-    /*glm::vec4(-0.5, 0.5, 0.0, 1.0),
-    glm::vec4( 0.5, 0.5, 0.0, 1.0),
-    glm::vec4( 0.5,-0.5, 0.0, 1.0),
-    glm::vec4(-0.5,-0.5, 0.0, 1.0)*/
-  glm::vec4( -0.6,  0.6, 0.0, 1.0),
+    glm::vec4( -0.6,  0.6, 0.0, 1.0),
     glm::vec4( -0.2,  0.8, 0.0, 1.0),
     glm::vec4(  0.1,  0.6, 0.0, 1.0),
     glm::vec4(  0.5,  0.5, 0.0, 1.0),
@@ -97,12 +93,14 @@ glm::mat4 BasisCatmull = glm::mat4(-1, 2,-1, 0,
                                    -3, 4, 1, 0,
                                     1,-1, 0, 0);
 
-// Uniform
-//------------------------------------------------------
-glm::mat4 UniformBasis = glm::mat4(-1, 3,-3,1,
-                                    3,-6, 3,0,
-                                   -3, 0, 3,0,
-                                    1, 4, 1,0);
+
+// Lil Man Vertices
+//-----------------------------------------------------------------------
+const int LIL_MAN_VERTICES = SPLINE_VERTICES*3;
+const float LIL_MAN_WIDTH = 0.05f;
+glm::vec4 lilManVertices[LIL_MAN_VERTICES];
+int lilManCurr = 0;
+
 
 // Program-required variables
 //----------------------------------------------------------------------------
@@ -120,11 +118,11 @@ int tMode = t1;
 
 // Shader program variables
 //------------------------------------------------------------
-//S for spline, CP for control points
-GLuint ProgramS, ProgramCP;
+//S for spline, CP for control points, LM for lil man
+GLuint ProgramS, ProgramCP, ProgramLM;
 
 // Model-view matrix uniform location
-GLuint ModelViewS, ModelViewCP;
+GLuint ModelViewS, ModelViewCP, ModelViewLM;
 
 
 
@@ -193,7 +191,6 @@ void createCatmullCurve(int p0, int p1, int p2, int p3) {
 
 //Used research from this link https://www2.cs.uregina.ca/~anima/UniformBSpline.pdf
 //for the formulation of the parametric equations.
-int counterUniform = 0;
 float B0(float i) {
     return pow(1-i,3)/6;
 }//end B0
@@ -207,6 +204,7 @@ float B3(float i) {
     return pow(i,3)/6;
 }//end B3
 
+int counterUniform = 0;
 // Used to create the vertices along a uniform rational B-spline segment.
 // Takes in a variable for the offset position of the control points.
 void createUniformCurve(int p0, int p1, int p2, int p3) {
@@ -237,7 +235,6 @@ void buildSplines() {
     //Making splines for each t value
     for (int j=0; j<5; j++) {
         t = T_VALUES[j];
-        printf("\tJ: %d\n",j);
         for (int i = 0; i<CONTROL_POINTS; i++) {
             //Setting the control points
             int points[4] = {i-1,i,i+1,i+2};
@@ -263,7 +260,6 @@ void buildSplines() {
     bezierVertices[counterBezier] = bezierVertices[0];
     catmullVertices[counterCatmull] = catmullVertices[0];
     uniformVertices[counterUniform] = uniformVertices[0];
-    t = T_VALUES[t1];
 }//end buildSplines
 
 
@@ -296,6 +292,28 @@ void buildControlPoints() {
         createControlPoint(initialControlPoints[i]);
     }//end for
 }//end buildControlPoints
+
+
+// Lil Man Functions
+//----------------------------------------------------------------------------
+
+int lilManIndex = 0;
+// Used to create the vertices of the triangle for the lil man.
+// Takes in a variable for the tip of the triangle and the bottom
+// of the triangle.
+void createLilMan(glm::vec4 initialPosition, glm::vec4 nextPosition) {
+    lilManVertices[lilManIndex++] = nextPosition;
+    lilManVertices[lilManIndex++] = initialPosition-LIL_MAN_WIDTH;
+    lilManVertices[lilManIndex++] = initialPosition+LIL_MAN_WIDTH;
+}//end createLilMan
+
+void buildLilMan() {
+    for ( int j=0; j<5; j++ ) {
+        for ( int i=0; i<SPLINE_VERTICES; i++ ) {
+            createLilMan(bezierVertices[i],bezierVertices[i+1]);
+        }//end for
+    }//end for
+}//end buildLilMan
 
 
 // Start of OpenGL drawing
@@ -389,15 +407,43 @@ void reloadControlPointsBuffer(int pointClicked) {
     loadControlPointsBuffer(vPosition);
 }//end reloadControlPointsBuffer
 
+// Used to load the buffer for the lil man
+void loadLilManBuffer(GLuint vPosition) {
+    GLuint buffer;
+
+    //*****************Lil Man fifth*******************
+    // Loading in the buffer for the lil man
+    glBindVertexArray(VAOs[4]);
+
+    // Creating and initializing a buffer object
+    glGenBuffers(1, &buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    // Making sure it has enough space for just the lil man
+    glBufferData(GL_ARRAY_BUFFER, sizeof(lilManVertices), lilManVertices, GL_STATIC_DRAW);
+    
+    // Set up vertex data for this vao
+    glEnableVertexAttribArray(vPosition);
+    glVertexAttribPointer(vPosition, 4, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(0));
+}//end loadLilManBuffer
+
+// Needed when one of the control points have been moved
+void reloadLilManBuffer(){
+    glUseProgram(ProgramLM);
+    GLuint vPosition = glGetAttribLocation(ProgramLM, "vPosition");
+    buildLilMan();
+    loadLilManBuffer(vPosition);
+}//end reloadLilManBuffer
+
 // OpenGL initialization
 void init() {
     buildSplines();
     buildControlPoints();
+    //buildLilMan();
 
     // Create vertex array objects
     glGenVertexArrays(4, VAOs);
 
-    // Load shader sets 1-3
+    // Load shader sets 2-4
     // First for the splines
     ProgramS = InitShader("a3v_splines.glsl", "a3f_splines.glsl");
     glUseProgram(ProgramS);
@@ -407,7 +453,7 @@ void init() {
     // Retrieve transformation uniform variable locations
     ModelViewS = glGetUniformLocation(ProgramS, "ModelView");
 
-    // Load shader set 4
+    // Load shader set 1
     // Now the control points
     ProgramCP = InitShader("a3v_cps.glsl", "a3f_cps.glsl");
     glUseProgram(ProgramCP);
@@ -416,6 +462,16 @@ void init() {
     loadControlPointsBuffer(vPosition);
     // Retrieve transformation uniform variable locations
     ModelViewCP = glGetUniformLocation(ProgramCP, "ModelView");
+
+    // Load shader set 5
+    // Now the lil man
+    /*ProgramLM = InitShader("a3v_lilman.glsl", "a3f_lilman.glsl");
+    glUseProgram(ProgramLM);
+    vPosition = glGetAttribLocation(ProgramLM, "vPosition");
+
+    loadLilManBuffer(vPosition);
+    // Retrieve transformation uniform variable locations
+    ModelViewLM = glGetUniformLocation(ProgramLM, "ModelView");*/
 
     glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
 
@@ -513,7 +569,6 @@ void drawSplines( glm::mat4 model_view ) {
     }//end if-else
 
     //Draw all of the lines to make up the spline
-    //printf("End: %d\n", end);
     for ( int i=start; i<end; i++ ) {
         glDrawArrays(GL_LINES, i, 2);
     }//end for
@@ -532,6 +587,82 @@ void drawControlPoints ( glm::mat4 model_view ) {
     }//end for
 }//end drawControlPoints
 
+//Used for drawing the lil man in our scene
+void drawLilMan ( glm::mat4 model_view ) {
+    glUseProgram(ProgramLM);
+
+    glUniformMatrix4fv(ModelViewLM, 1, GL_FALSE, glm::value_ptr(model_view));
+    glBindVertexArray(VAOs[4]);
+
+    //Setting which types of spline the lil man follows when drawing
+    int start = 0;
+    int end = 0;
+
+    if ( tMode == t1 ) {
+        if ( mode == Bezier ) {
+            start = 0;
+            end = BezierSegments[0];
+        } else if ( mode == CatmullRom ) {
+            start = 0;
+            end = CatmullSegments[0];
+        } else {
+            start = 0;
+            end = UniformSegments[0];
+        }//end if-else
+    } else if ( tMode == t2 ) {
+        if ( mode == Bezier ) {
+            start = BezierSegments[0];
+            end = BezierSegments[1];
+        } else if ( mode == CatmullRom ) {
+            start = CatmullSegments[0];
+            end = CatmullSegments[1];
+        } else {
+            start = UniformSegments[0];
+            end = UniformSegments[1];
+        }//end if-else
+    } else if ( tMode == t3 ) {
+        if ( mode == Bezier ) {
+            start = BezierSegments[1];
+            end = BezierSegments[2];
+        } else if ( mode == CatmullRom ) {
+            start = CatmullSegments[1];
+            end = CatmullSegments[2];
+        } else {
+            start = UniformSegments[1];
+            end = UniformSegments[2];
+        }//end if-else
+    } else if ( tMode == t4 ) {
+        if ( mode == Bezier ) {
+            start = BezierSegments[2];
+            end = BezierSegments[3];
+        } else if ( mode == CatmullRom ) {
+            start = CatmullSegments[2];
+            end = CatmullSegments[3];
+        } else {
+            start = UniformSegments[2];
+            end = UniformSegments[3];
+        }//end if-else
+    } else {
+        if ( mode == Bezier ) {
+            start = BezierSegments[3];
+            end = BezierSegments[4];
+        } else if ( mode == CatmullRom ) {
+            start = CatmullSegments[3];
+            end = CatmullSegments[4];
+        } else {
+            start = UniformSegments[3];
+            end = UniformSegments[4];
+        }//end if-else
+    }//end if-else
+
+    start += lilManCurr;
+
+    //Draw the lil man
+    for ( int i=start; i<end; i++ ) {
+        glDrawArrays(GL_TRIANGLES, i, 3);
+    }//end for
+}//end drawLilMan
+
 
 // OpenGL display
 //------------------------------------------------------------------
@@ -549,6 +680,9 @@ void display(void) {
     //Drawing the control points
     drawControlPoints(model_view);
 
+    //Drawing the lil man
+    drawLilMan(model_view);
+
     glutSwapBuffers();
 }//end display
 
@@ -556,7 +690,12 @@ void display(void) {
 //Other OpenGL drawing functions
 //----------------------------------------------------------------------------
 
-void update(void){}
+void update(void){
+    lilManCurr++;
+    if ( lilManCurr == LIL_MAN_VERTICES ) {
+        lilManCurr = 0;
+    }//end if
+}//end update
 
 //For mouse inputs
 //Clicking on any control point will cause us to move that point to
@@ -594,6 +733,7 @@ void mouse(int button, int state, int x, int y) {
             initialControlPoints[pointClicked].y = newY;
             reloadControlPointsBuffer(pointClicked);
             reloadSplinesBuffer();
+            //reloadLilManBuffer();
             firstClick = true;
         }//end if-else
     }//end if
