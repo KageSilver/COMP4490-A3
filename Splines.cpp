@@ -238,7 +238,6 @@ void buildSplines() {
         for (int i = 0; i<CONTROL_POINTS; i++) {
             //Setting the control points
             int points[4] = {i-1,i,i+1,i+2};
-            printf("\t\tI: %d\n",i);
             if ( i == 0 ) {
                 points[0] = CONTROL_POINTS-1;
             } else if ( (i+2) % CONTROL_POINTS == 0 ) {
