@@ -1,10 +1,10 @@
 # Assignment 3 - Tara Boulanger (7922331)
-(primarily the same as A2 readme)
+
 ### Platform details:
 I am running this on a Windows 10 PC with an AMD Ryzen 5 5600X 6-Core  Processor with 3.70 GHz and an NVIDIA GeForce RTX 3060 graphics card.
 
 ### A+ feature:
-
+I ran out of time for implementing the A+ feature. However, the skeleton code for the triangle that was going to be moving along the curves remains. All of the functions with the words "lilman" in it is to symbolize the triangle going along the curves, and I was calling it that just to make light of implementing an A+ feature.
 
 ### Other notes:
 I used parts of my assignment 2 solution as a base example for both my curves files.

@@ -681,7 +681,7 @@ void display(void) {
     drawControlPoints(model_view);
 
     //Drawing the lil man
-    drawLilMan(model_view);
+    //drawLilMan(model_view);
 
     glutSwapBuffers();
 }//end display
@@ -691,10 +691,10 @@ void display(void) {
 //----------------------------------------------------------------------------
 
 void update(void){
-    lilManCurr++;
-    if ( lilManCurr == LIL_MAN_VERTICES ) {
-        lilManCurr = 0;
-    }//end if
+    //lilManCurr++;
+    //if ( lilManCurr == LIL_MAN_VERTICES ) {
+    //    lilManCurr = 0;
+    //}//end if
 }//end update
 
 //For mouse inputs
